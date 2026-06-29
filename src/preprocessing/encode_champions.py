@@ -2,25 +2,18 @@ import numpy as np
 import pandas as pd
 import requests
 from sklearn.model_selection import train_test_split
+from pathlib import Path
 
-# python -m src.feature_engineering.feature_builder
 from src.feature_engineering.composition_features import (
     get_team_composition_features,
 )
 from src.feature_engineering.feature_builder import build_features
+from src.feature_engineering.load_champion_data import load_champion_data
 
 # Get champion data
-def get_live_champion_data():
-    version_url = "https://ddragon.leagueoflegends.com/api/versions.json"
-    latest_version = requests.get(version_url).json()[0]
-
-    data_url = f"https://ddragon.leagueoflegends.com/cdn/{latest_version}/data/en_US/champion.json"
-    response = requests.get(data_url).json()
-
-    return response["data"]
-
-
-live_champ_data = get_live_champion_data()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+JSON_PATH = PROJECT_ROOT / "data" / "champions.json"
+live_champ_data = load_champion_data(JSON_PATH)
 
 # Mock data for testing
 roles = [
@@ -90,3 +83,5 @@ X_train, X_test, y_train, y_test = train_test_split(
 print(f"X_train shape: {X_train.shape}")
 print(f"Features created:\n{list(X_train.columns)}")
 print(X_train.head(3)) # print first three rows of training matrix
+
+# python -m src.feature_engineering.feature_builder
