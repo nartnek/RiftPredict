@@ -15,7 +15,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 JSON_PATH = PROJECT_ROOT / "data" / "champions.json"
 live_champ_data = load_champion_data(JSON_PATH)
 
-# Mock data for testing
+rank_mapping = {
+    "Unranked": 0, # normal games
+    "Iron": 1, 
+    "Bronze": 2, 
+    "Silver": 3, 
+    "Gold": 4, 
+    "Platinum": 5, 
+    "Emerald": 6, 
+    "Diamond": 7, 
+    "Master": 8, 
+    "Grandmaster": 9, 
+    "Challenger": 10
+}
+
 roles = [
     "blue_top",
     "blue_jungle",
@@ -29,6 +42,7 @@ roles = [
     "red_support",
 ]
 
+# Mock data for testing
 np.random.seed(42) # Random number generator picks same sequence
 num_matches = 100
 mock_matches = {
@@ -36,6 +50,8 @@ mock_matches = {
     for role in roles
 }
 mock_matches["winner"] = np.random.choice([0, 1], num_matches)
+mock_matches["rank"] = np.random.choice(["Bronze", "Silver", "Gold", "Platinum", "Diamond"], num_matches)
+mock_matches["queue_type"] = np.random.choice(["RANKED_SOLO", "RANKED_FLEX"], num_matches)
 df_matches = pd.DataFrame(mock_matches)
 
 # Transform data into feature matrix
@@ -64,6 +80,9 @@ def transform_dataset(df_raw, champion_data):
         # Map champion text names to numerical stats
         match_vector = build_features(blue_team, red_team, champion_data)
 
+        # Add rank, queue, winner lists
+        match_vector["rank"] = row["rank"]
+        match_vector["queue_type"] = row["queue_type"]
         match_vector["winner"] = row["winner"]
 
         processed_rows.append(match_vector)
@@ -73,7 +92,13 @@ def transform_dataset(df_raw, champion_data):
 
 df_features = transform_dataset(df_matches, live_champ_data)
 
-X = df_features.drop(columns=["winner"])
+df_features["rank"] = df_features["rank"].fillna("Unranked") # fill empty rank with "Unranked" for normal games
+df_features["rank_encoded"] = df_features["rank"].map(rank_mapping) # Map ranks to numerical values
+
+df_features = pd.get_dummies(df_features, columns=["queue_type"], drop_first=True, dtype=int) # Use one-hot encoding
+df_features = df_features.drop(columns=["rank"])
+
+X = df_features.drop(columns=["winner"]) # drop old winner column
 y = df_features["winner"]
 
 X_train, X_test, y_train, y_test = train_test_split(
@@ -83,5 +108,6 @@ X_train, X_test, y_train, y_test = train_test_split(
 print(f"X_train shape: {X_train.shape}")
 print(f"Features created:\n{list(X_train.columns)}")
 print(X_train.head(3)) # print first three rows of training matrix
+print(X_train[[col for col in X_train.columns if 'rank' in col or 'queue' in col]].head(3))
 
-# python -m src.feature_engineering.feature_builder
+# python -m src.preprocessing.encode_champions
