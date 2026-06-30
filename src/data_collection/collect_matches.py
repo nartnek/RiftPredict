@@ -3,6 +3,9 @@ import time
 import argparse
 import requests
 import pandas as pd
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 API_KEY = os.getenv("RIOT_API_KEY")
