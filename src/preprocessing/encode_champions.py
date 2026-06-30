@@ -46,7 +46,7 @@ roles = [
 ]
 
 # Implement real match data from riot API
-df_matches = pd.read_csv("clean_matches.csv")
+df_matches = pd.read_csv(PROJECT_ROOT / "data" / "clean_matches.csv")
 
 # Transform data into feature matrix
 def transform_dataset(df_raw, champion_data):

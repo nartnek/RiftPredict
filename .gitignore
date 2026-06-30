@@ -1,5 +1,6 @@
 # Python Byte-Compiled / Optimized Files
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 
@@ -63,3 +64,9 @@ coverage.xml
 # Operating System Files
 .DS_Store
 Thumbs.db
+
+# .csv and .png Files
+*.csv
+results/
+data/*.csv
+results/*.png

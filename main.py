@@ -1,35 +1,51 @@
-# This is for testing the feature engineering functions. It is not part of the main application.
-from src.feature_engineering.feature_builder import build_features
-from src.feature_engineering.load_champion_data import load_champion_data
-from  src.feature_engineering.composition_features import get_team_composition_features
-from pathlib import Path
+import argparse
 
-PROJECT_ROOT = Path(__file__).parent
+from src.data_collection.get_puuid import get_puuid
+from src.data_collection.collect_matches import collect_matches, clean_and_split
 
-champion_data = load_champion_data(PROJECT_ROOT / "data" / "champions.json")
+# To test run: python3 main.py --game-name MunchyPunchyLOL --tag-line TTV1 --count 5
 
-blue_team = [
-    "Aatrox",
-    "Ahri",
-    "Ashe",
-    "Leona",
-    "LeeSin"
-]
+def main():
+    parser = argparse.ArgumentParser(
+        description="Collect Riot match data and train models."
+    )
 
-red_team = [
-    "Darius",
-    "Diana",
-    "Draven",
-    "Jinx",
-    "Thresh"
-]
+    parser.add_argument("--game-name", required=True, help="Riot ID game name")
+    parser.add_argument("--tag-line", required=True, help="Riot ID tag line")
+    parser.add_argument("--count", type=int, default=20, help="Number of matches to collect")
+    parser.add_argument(
+        "--queue",
+        type=int,
+        default=None,
+        help="Optional queue ID. Example: 420 = ranked solo/duo, 440 = ranked flex."
+    )
 
-features = get_team_composition_features(blue_team, champion_data)
+    args = parser.parse_args()
 
-team_features = build_features(blue_team, red_team, champion_data)
-# for team blue
-print(features)
+    print("Getting PUUID...")
+    puuid = get_puuid(args.game_name, args.tag_line)
+    print(f"PUUID found: {puuid}")
 
-# for both teams
-print(team_features)
+    print("Collecting matches...")
+    df = collect_matches(
+        puuids=[puuid],
+        matches_per_player=args.count,
+        queue=args.queue
+    )
 
+    print("Saving CSV files...")
+    clean_and_split(df)
+
+    print("Training and evaluating models...")
+
+    # Important: import this AFTER the CSV files are created.
+    # train_and_evaluate imports X_train, X_test, y_train, y_test from preprocessing.
+    from src.models.train_and_evaluate import main as train_models
+
+    train_models()
+
+    print("Full pipeline complete.")
+
+
+if __name__ == "__main__":
+    main()

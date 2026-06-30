@@ -149,7 +149,7 @@ def collect_matches(puuids, matches_per_player=20, queue=None):
 
     rows = []
 
-    for i, match_id in enumerate(all_match_ids, start=1):
+    for i, match_id in enumerate(sorted(all_match_ids), start=1):
         print(f"[{i}/{len(all_match_ids)}] Downloading {match_id}")
         match_json = get_match_data(match_id)
         row = extract_match_row(match_json)
@@ -166,7 +166,9 @@ def clean_and_split(df):
     Saves raw, clean, train, and test CSVs.
     """
 
-    df.to_csv("raw_matches.csv", index=False)
+    os.makedirs("data", exist_ok=True)
+
+    df.to_csv("data/raw_matches.csv", index=False)
 
     needed_columns = [
         "match_id",
@@ -178,19 +180,19 @@ def clean_and_split(df):
     clean_df = df.drop_duplicates(subset=["match_id"])
     clean_df = clean_df.dropna(subset=needed_columns)
 
-    clean_df.to_csv("clean_matches.csv", index=False)
+    clean_df.to_csv("data/clean_matches.csv", index=False)
 
     train_df = clean_df.sample(frac=0.8, random_state=42)
     test_df = clean_df.drop(train_df.index)
 
-    train_df.to_csv("train.csv", index=False)
-    test_df.to_csv("test.csv", index=False)
+    train_df.to_csv("data/train.csv", index=False)
+    test_df.to_csv("data/test.csv", index=False)
 
     print("Saved:")
-    print("raw_matches.csv")
-    print("clean_matches.csv")
-    print("train.csv")
-    print("test.csv")
+    print("data/raw_matches.csv")
+    print("data/clean_matches.csv")
+    print("data/train.csv")
+    print("data/test.csv")
 
 
 def main():
