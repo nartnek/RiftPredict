@@ -19,6 +19,22 @@ from src.preprocessing.encode_champions import X_train, X_test, y_train, y_test
 def main():
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
+    
+    print(f"Training samples: {len(X_train)}")
+    print(f"Testing samples: {len(X_test)}")
+    print(f"Training labels: {sorted(y_train.unique())}")
+    print(f"Testing labels: {sorted(y_test.unique())}")
+
+    if len(X_train) < 5 or len(X_test) < 2:
+        print("Not enough data to train/evaluate models reliably.")
+        print("Try running with --count 20 or higher.")
+        return
+
+    if y_train.nunique() < 2:
+        print("Training data only has one class.")
+        print("The model needs both blue wins and red wins to train properly.")
+        print("Try running with more matches, like --count 50.")
+        return
 
     n_train = len(X_train)
 
@@ -59,12 +75,13 @@ def main():
         })
 
         disp = ConfusionMatrixDisplay.from_estimator(
-            model,
-            X_test,
-            y_test,
-            cmap="Blues",
-            display_labels=["Loss (0)", "Win (1)"],
-        )
+        model,
+        X_test,
+        y_test,
+        labels=[0, 1],
+        cmap="Blues",
+        display_labels=["Loss (0)", "Win (1)"],
+    )
 
         disp.ax_.set_title(f"{model_name} Confusion Matrix")
         plt.savefig(f"{results_dir}/confusion_matrix_{model_name.lower()}.png")
