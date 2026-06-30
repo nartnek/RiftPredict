@@ -1,6 +1,9 @@
 import os
 import requests
 from urllib.parse import quote
+from dotenv import load_dotenv
+
+load_dotenv()
 
 API_KEY = os.getenv("RIOT_API_KEY")
 

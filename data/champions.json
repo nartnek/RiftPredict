@@ -3682,6 +3682,56 @@
         "attackspeed": 0.656
       }
     },
+    "Locke": {
+    "version": "16.12.1",
+    "id": "Locke",
+    "key": "173",
+    "name": "Locke",
+    "title": "the Ashen Exorcist",
+    "blurb": "Harnessing the binding power of the sacred ash, Locke walks the boundary between the living world and the spirit realm. Armed with his ritual blade, he purges corruption from the Rift, trapping untamed spirits and turning their own volatile energy against those who dare disrupt the balance...",
+    "info": {
+      "attack": 4,
+      "defense": 6,
+      "magic": 7,
+      "difficulty": 6
+    },
+    "image": {
+      "full": "Locke.png",
+      "sprite": "champion5.png",
+      "group": "champion",
+      "x": 144,
+      "y": 48,
+      "w": 48,
+      "h": 48
+    },
+    "tags": [
+      "Mage",
+      "Fighter"
+    ],
+    "partype": "Mana",
+    "stats": {
+      "hp": 610,
+      "hpperlevel": 108,
+      "mp": 400,
+      "mpperlevel": 25,
+      "movespeed": 340,
+      "armor": 28,
+      "armorperlevel": 4.2,
+      "spellblock": 32,
+      "spellblockperlevel": 2.05,
+      "attackrange": 175,
+      "hpregen": 8.5,
+      "hpregenperlevel": 0.8,
+      "mpregen": 8,
+      "mpregenperlevel": 0.8,
+      "crit": 0,
+      "critperlevel": 0,
+      "attackdamage": 64,
+      "attackdamageperlevel": 3,
+      "attackspeedperlevel": 2.5,
+      "attackspeed": 0.625
+    }
+  },
     "Lucian": {
       "version": "15.12.1",
       "id": "Lucian",
@@ -8164,6 +8214,55 @@
         "attackdamageperlevel": 3.4,
         "attackspeedperlevel": 1.6,
         "attackspeed": 0.736
+      }
+    },
+    "Zaahen": {
+    "version": "16.12.1",
+    "id": "Zaahen",
+    "key": "174",
+    "name": "Zaahen",
+    "title": "The Unsundered",
+    "blurb": "A phantom born from the bleeding edges of the Void, Zaahen manipulates the literal fabric of darkness to ensnare his prey. Folding space and shattering reality with calculated precision, he hunts from the unseen folds of the Rift, leaving nothing behind but lingering whispers and cold, empty air...",
+    "info": {
+      "attack": 8,
+      "defense": 3,
+      "magic": 8,
+      "difficulty": 9
+    },
+    "image": {
+      "full": "Zaahen.png",
+      "sprite": "champion5.png",
+      "group": "champion",
+      "x": 192,
+      "y": 48,
+      "w": 48,
+      "h": 48
+    },
+    "tags": [
+      "Fighter"
+    ],
+    "partype": "Mana",
+    "stats": {
+      "hp": 640,
+      "hpperlevel": 95,
+      "mp": 200,
+      "mpperlevel": 0,
+      "movespeed": 345,
+      "armor": 26,
+      "armorperlevel": 3.8,
+      "spellblock": 30,
+      "spellblockperlevel": 1.25,
+      "attackrange": 150,
+      "hpregen": 6.5,
+      "hpregenperlevel": 0.6,
+      "mpregen": 0,
+      "mpregenperlevel": 0,
+      "crit": 0,
+      "critperlevel": 0,
+      "attackdamage": 61,
+      "attackdamageperlevel": 3.5,
+      "attackspeedperlevel": 3.2,
+      "attackspeed": 0.665
       }
     },
     "Zed": {
