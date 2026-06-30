@@ -74,10 +74,6 @@ def transform_dataset(df_raw, champion_data):
         # Map champion text names to numerical stats
         match_vector = build_features(blue_team, red_team, champion_data)
 
-        if match_vector is None:
-            print(f"Skipping match {row['match_id']} due to an unknown champion on Blue or Red team.")
-            continue
-
         # Add rank, queue, winner lists
         #match_vector["rank"] = row["rank"]
         #match_vector["queue_type"] = row["queue_type"]

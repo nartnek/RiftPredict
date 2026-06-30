@@ -24,10 +24,6 @@ def get_team_composition_features(team_champions,champion_data):
 
     for champion in team_champions:
 
-        if champion not in champion_data:
-            print(f"Found unknown champion '{champion}'. Skipping match calculation.")
-            return None
-
         champion_info = champion_data[champion]
 
         tags = champion_info["tags"]
