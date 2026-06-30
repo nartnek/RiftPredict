@@ -3,6 +3,7 @@ import argparse
 from src.data_collection.get_puuid import get_puuid
 from src.data_collection.collect_matches import collect_matches, clean_and_split
 
+# To test run: python3 main.py --game-name MunchyPunchyLOL --tag-line TTV1 --count 5
 
 def main():
     parser = argparse.ArgumentParser(

@@ -1,4 +1,0 @@
-Model,Accuracy,Precision,Recall,Weighted F1
-KNN,0.6,0.6562,0.6,0.5604
-DT,0.3,0.2917,0.3,0.2929
-RF,0.55,0.5667,0.55,0.52
