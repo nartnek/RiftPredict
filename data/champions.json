@@ -4231,9 +4231,9 @@
         "attackspeed": 0.656
       }
     },
-    "MonkeyKing": {
+    "Wukong": {
       "version": "16.13.1",
-      "id": "MonkeyKing",
+      "id": "Wukong",
       "key": "62",
       "name": "Wukong",
       "title": "the Monkey King",
@@ -4245,7 +4245,7 @@
         "difficulty": 3
       },
       "image": {
-        "full": "MonkeyKing.png",
+        "full": "Wukong.png",
         "sprite": "champion2.png",
         "group": "champion",
         "x": 240,
