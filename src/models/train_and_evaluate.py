@@ -1,5 +1,7 @@
 import os
 import pandas as pd
+import numpy as np            # Added missing import
+import seaborn as sns         # Added missing import
 import matplotlib.pyplot as plt
 
 from sklearn.ensemble import RandomForestClassifier
@@ -15,7 +17,82 @@ from sklearn.metrics import (
 
 from src.preprocessing.encode_champions import X_train, X_test, y_train, y_test
 
+def plot_feature_importance(model, feature_names, top_n=10, save_path='feature_importance.png'):
+    """
+    Generates and saves a bar chart of the most important features.
+    """
+    try:
+        if hasattr(model, 'feature_importances_'):
+            importances = model.feature_importances_
+        elif hasattr(model, 'coef_'):
+            importances = np.abs(model.coef_[0])
+        else:
+            print("Model does not support feature importances.")
+            return
 
+        indices = np.argsort(importances)[::-1][:top_n]
+        top_features = [feature_names[i] for i in indices]
+        top_importances = importances[indices]
+
+        plt.figure(figsize=(10, 6))
+        sns.barplot(x=top_importances, y=top_features, palette="viridis")
+        plt.title('Top Feature Importances')
+        plt.xlabel('Importance Score')
+        plt.ylabel('Features')
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.close()
+        print(f"Successfully saved {save_path}")
+    except Exception as e:
+        print(f"Could not generate feature importance plot: {e}")
+
+def plot_model_comparison(model_scores, save_path='model_comparison.png'):
+    """
+    Generates and saves a bar chart comparing different models.
+    """
+    try:
+        models = list(model_scores.keys())
+        scores = list(model_scores.values())
+
+        plt.figure(figsize=(8, 5))
+        sns.barplot(x=models, y=scores, palette="mako")
+        plt.title('Model Accuracy Comparison')
+        plt.ylim(0, 1.0)
+        plt.ylabel('Accuracy')
+        
+        for i, score in enumerate(scores):
+            plt.text(i, score + 0.02, f"{score:.2f}", ha='center')
+            
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.close()
+        print(f"Successfully saved {save_path}")
+    except Exception as e:
+        print(f"Could not generate model comparison plot: {e}")
+
+def plot_win_probability(probability_array, team_names=['Blue Team', 'Red Team'], save_path='win_probability_bar.png'):
+    """
+    Generates a horizontal stacked bar for a single match's win probability.
+    """
+    try:
+        blue_prob, red_prob = probability_array[0], probability_array[1]
+
+        fig, ax = plt.subplots(figsize=(8, 2))
+        ax.barh(0, blue_prob, color='#1f77b4', label=f"{team_names[0]} ({blue_prob*100:.1f}%)")
+        ax.barh(0, red_prob, left=blue_prob, color='#d62728', label=f"{team_names[1]} ({red_prob*100:.1f}%)")
+
+        ax.set_xlim(0, 1)
+        ax.set_yticks([])
+        ax.set_title("Predicted Win Probability (Sample Match)")
+        ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=2)
+        
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.close()
+        print(f"Successfully saved {save_path}")
+    except Exception as e:
+        print(f"Could not generate win probability plot: {e}")
+        
 def main():
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
@@ -37,10 +114,8 @@ def main():
         return
 
     n_train = len(X_train)
-
     knn_neighbors = min(5, n_train)
 
-    # Prefer an odd number for KNN if possible
     if knn_neighbors % 2 == 0 and knn_neighbors > 1:
         knn_neighbors -= 1
 
@@ -53,12 +128,10 @@ def main():
     }
 
     metrics_list = []
-
     print("Training models...")
 
     for model_name, model in models.items():
         model.fit(X_train, y_train)
-
         y_pred = model.predict(X_test)
 
         acc = accuracy_score(y_test, y_pred)
@@ -75,46 +148,46 @@ def main():
         })
 
         disp = ConfusionMatrixDisplay.from_estimator(
-        model,
-        X_test,
-        y_test,
-        labels=[0, 1],
-        cmap="Blues",
-        display_labels=["Loss (0)", "Win (1)"],
-    )
+            model,
+            X_test,
+            y_test,
+            labels=[0, 1],
+            cmap="Blues",
+            display_labels=["Loss (0)", "Win (1)"],
+        )
 
         disp.ax_.set_title(f"{model_name} Confusion Matrix")
         plt.savefig(f"{results_dir}/confusion_matrix_{model_name.lower()}.png")
         plt.close()
-
         print(f"[{model_name}] Evaluated and confusion matrix saved.")
 
     metrics_df = pd.DataFrame(metrics_list)
-
     print("\n--- Model Evaluation Results ---")
     print(metrics_df.to_string(index=False))
-
     metrics_df.to_csv(f"{results_dir}/metrics.csv", index=False)
 
-    metrics_df.plot(
-        x="Model",
-        y=["Accuracy", "Weighted F1"],
-        kind="bar",
-        figsize=(8, 6),
-    )
+    # --- NEW VISUALIZATION CALLS ---
 
-    plt.title("Baseline Models: Accuracy vs F1 Score")
-    plt.ylabel("Score")
-    plt.ylim(0, 1.05)
-    plt.xticks(rotation=0)
-    plt.legend(loc="lower right")
-    plt.tight_layout()
+    # 1. Model Comparison (Replaces your old pandas plot with the seaborn one)
+    # Convert our dataframe columns into a dictionary for the function: {'KNN': 0.85, 'DT': 0.78, ...}
+    accuracy_dict = dict(zip(metrics_df["Model"], metrics_df["Accuracy"]))
+    plot_model_comparison(accuracy_dict, save_path=f"{results_dir}/model_comparison.png")
 
-    plt.savefig(f"{results_dir}/model_comparison.png")
-    plt.close()
+    # We will use the Random Forest model for the next two plots as it performs best 
+    # and naturally supports feature importances and probability predictions.
+    rf_model = models["RF"]
+
+    # 2. Feature Importance
+    plot_feature_importance(rf_model, X_train.columns, save_path=f"{results_dir}/rf_feature_importance.png")
+
+    # 3. Win Probability
+    # Let's pull a single match from the test set to simulate a live prediction
+    if hasattr(rf_model, "predict_proba"):
+        # We use .iloc[[0]] to keep it as a DataFrame so sklearn doesn't throw a feature names warning
+        sample_probs = rf_model.predict_proba(X_test.iloc[[0]])[0] 
+        plot_win_probability(sample_probs, team_names=['Blue Team', 'Red Team'], save_path=f"{results_dir}/sample_match_probability.png")
 
     print(f"\nAll tasks complete! Check the '{results_dir}' folder for graphs and metrics CSV.")
-
 
 if __name__ == "__main__":
     main()
