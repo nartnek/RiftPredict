@@ -45,6 +45,43 @@ roles = [
     "red_sup",
 ]
 
+def _normalize_name(name):
+    """Lowercase and strip everything but letters/digits, so casing and
+    punctuation differences (FiddleSticks/Fiddlesticks, Kai'Sa/Kaisa,
+    Bel'Veth/Belveth, ...) collapse to the same comparable string."""
+    return "".join(ch for ch in str(name).lower() if ch.isalnum())
+
+_MANUAL_NAME_OVERRIDES = {
+    "wukong": "MonkeyKing",
+}
+
+_CHAMPION_ALIASES = {
+    _normalize_name(key): key for key in live_champ_data.keys()
+}
+
+def resolve_champion_name(raw_name):
+    """
+    Map a champion name as it appears in clean_matches.csv to the exact
+    key used in champion_data (live_champ_data), so downstream lookups
+    like champion_data[champion] never miss due to a naming mismatch.
+    """
+    normalized = _normalize_name(raw_name)
+
+    if normalized in _MANUAL_NAME_OVERRIDES:
+        return _MANUAL_NAME_OVERRIDES[normalized]
+
+    resolved = _CHAMPION_ALIASES.get(normalized)
+    if resolved is None:
+        raise KeyError(
+            f"Champion '{raw_name}' has no match in champion_data (loaded "
+            f"from {JSON_PATH}) even after normalizing case/punctuation. "
+            "Check that data/champions.json is up to date and contains "
+            "this champion, or add a manual override to "
+            "_MANUAL_NAME_OVERRIDES if it's a known naming quirk like "
+            "Wukong/MonkeyKing."
+        )
+    return resolved
+
 # Implement real match data from riot API
 df_matches = pd.read_csv(PROJECT_ROOT / "data" / "clean_matches.csv")
 
@@ -57,20 +94,19 @@ def transform_dataset(df_raw, champion_data):
     for _, row in df_raw.iterrows():
 
         blue_team = [
-            row["blue_top"],
-            row["blue_jg"],
-            row["blue_mid"],
-            row["blue_adc"],
-            row["blue_sup"],
+            resolve_champion_name(row["blue_top"]),
+            resolve_champion_name(row["blue_jg"]),
+            resolve_champion_name(row["blue_mid"]),
+            resolve_champion_name(row["blue_adc"]),
+            resolve_champion_name(row["blue_sup"]),
         ]
         red_team = [
-            row["red_top"],
-            row["red_jg"],
-            row["red_mid"],
-            row["red_adc"],
-            row["red_sup"],
+            resolve_champion_name(row["red_top"]),
+            resolve_champion_name(row["red_jg"]),
+            resolve_champion_name(row["red_mid"]),
+            resolve_champion_name(row["red_adc"]),
+            resolve_champion_name(row["red_sup"]),
         ]
-
         # Map champion text names to numerical stats
         match_vector = build_features(blue_team, red_team, champion_data)
 
@@ -104,7 +140,10 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42
 )
 
+"""
 print(f"X_train shape: {X_train.shape}")
 print(f"Features created:\n{list(X_train.columns)}")
 print(X_train.head(3)) # print first three rows of training matrix
 print(X_train[[col for col in X_train.columns if 'rank' in col or 'queue' in col]].head(3))
+"""
+

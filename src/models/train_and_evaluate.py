@@ -1,7 +1,8 @@
 import os
+import joblib
 import pandas as pd
-import numpy as np            # Added missing import
-import seaborn as sns         # Added missing import
+import numpy as np
+import seaborn as sns
 import matplotlib.pyplot as plt
 
 from sklearn.ensemble import RandomForestClassifier
@@ -95,7 +96,10 @@ def plot_win_probability(probability_array, team_names=['Blue Team', 'Red Team']
         
 def main():
     results_dir = "results"
+    models_dir = "saved_models" # create directory to store model
+
     os.makedirs(results_dir, exist_ok=True)
+    os.makedirs(models_dir, exist_ok=True)
     
     print(f"Training samples: {len(X_train)}")
     print(f"Testing samples: {len(X_test)}")
@@ -132,6 +136,12 @@ def main():
 
     for model_name, model in models.items():
         model.fit(X_train, y_train)
+
+        # save model to disk
+        model_filename = os.path.join(models_dir, f"{model_name.lower()}_model.joblib")
+        joblib.dump(model, model_filename)
+        print(f"[{model_name}] Saved trained model to {model_filename}")
+
         y_pred = model.predict(X_test)
 
         acc = accuracy_score(y_test, y_pred)
@@ -165,6 +175,16 @@ def main():
     print("\n--- Model Evaluation Results ---")
     print(metrics_df.to_string(index=False))
     metrics_df.to_csv(f"{results_dir}/metrics.csv", index=False)
+
+    # save the best performing model
+    best_model_name = metrics_df.sort_values(by="Accuracy", ascending=False).iloc[0]["Model"]
+    best_model = models[best_model_name]
+    best_model_path = os.path.join(models_dir, "best_model.joblib")
+    
+    joblib.dump(best_model, best_model_path)
+    print(f"\nSaved best overall model ({best_model_name}) to '{best_model_path}'")
+
+    # --- VISUALIZATIONS ---
 
     # --- NEW VISUALIZATION CALLS ---
 
