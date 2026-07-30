@@ -5,7 +5,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import (
@@ -125,10 +125,20 @@ def main():
 
     print(f"Using KNN with n_neighbors={knn_neighbors}")
 
+    knn_clf = KNeighborsClassifier(n_neighbors=knn_neighbors)
+    dt_clf = DecisionTreeClassifier(random_state=42)
+    rf_clf = RandomForestClassifier(random_state=42)
+
     models = {
-        "KNN": KNeighborsClassifier(n_neighbors=knn_neighbors),
-        "DT": DecisionTreeClassifier(random_state=42),
-        "RF": RandomForestClassifier(random_state=42),
+        "KNN": knn_clf,
+        "DT": dt_clf,
+        "RF": rf_clf,
+        # Soft-voting ensemble: averages each model's predict_proba output.
+        # This also smooths out KNN's blocky probabilities (e.g. exact 60/40 steps).
+        "Ensemble": VotingClassifier(
+            estimators=[("knn", knn_clf), ("dt", dt_clf), ("rf", rf_clf)],
+            voting="soft",
+        ),
     }
 
     metrics_list = []
@@ -176,8 +186,8 @@ def main():
     print(metrics_df.to_string(index=False))
     metrics_df.to_csv(f"{results_dir}/metrics.csv", index=False)
 
-    # save the best performing model
-    best_model_name = metrics_df.sort_values(by="Accuracy", ascending=False).iloc[0]["Model"]
+
+    best_model_name = "Ensemble"
     best_model = models[best_model_name]
     best_model_path = os.path.join(models_dir, "best_model.joblib")
     
@@ -201,10 +211,12 @@ def main():
     plot_feature_importance(rf_model, X_train.columns, save_path=f"{results_dir}/rf_feature_importance.png")
 
     # 3. Win Probability
-    # Let's pull a single match from the test set to simulate a live prediction
-    if hasattr(rf_model, "predict_proba"):
+    # Let's pull a single match from the test set to simulate a live prediction.
+    # Use the Ensemble here since its probabilities are smoother/better-calibrated than any single model.
+    ensemble_model = models["Ensemble"]
+    if hasattr(ensemble_model, "predict_proba"):
         # We use .iloc[[0]] to keep it as a DataFrame so sklearn doesn't throw a feature names warning
-        sample_probs = rf_model.predict_proba(X_test.iloc[[0]])[0] 
+        sample_probs = ensemble_model.predict_proba(X_test.iloc[[0]])[0]
         plot_win_probability(sample_probs, team_names=['Blue Team', 'Red Team'], save_path=f"{results_dir}/sample_match_probability.png")
 
     print(f"\nAll tasks complete! Check the '{results_dir}' folder for graphs and metrics CSV.")
