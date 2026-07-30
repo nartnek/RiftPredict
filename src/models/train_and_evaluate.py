@@ -1,10 +1,7 @@
 import os
-from pathlib import Path
-
-import joblib
 import pandas as pd
-import numpy as np            
-import seaborn as sns         
+import numpy as np            # Added missing import
+import seaborn as sns         # Added missing import
 import matplotlib.pyplot as plt
 
 from sklearn.ensemble import RandomForestClassifier
@@ -19,12 +16,6 @@ from sklearn.metrics import (
 )
 
 from src.preprocessing.encode_champions import X_train, X_test, y_train, y_test
-
-# Project root (.../RiftPredict), independent of the working directory
-# the script is launched from. This is where the trained model is saved
-# so that predict.py can always find it again.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODELS_DIR = PROJECT_ROOT / "models"
 
 def plot_feature_importance(model, feature_names, top_n=10, save_path='feature_importance.png'):
     """
@@ -174,34 +165,6 @@ def main():
     print("\n--- Model Evaluation Results ---")
     print(metrics_df.to_string(index=False))
     metrics_df.to_csv(f"{results_dir}/metrics.csv", index=False)
-
-    # --- SAVE BEST MODEL ---
-    # "Best" = highest test-set accuracy (the same metric already driving
-    # the model comparison chart below). Ties keep the first model in
-    # dict order (KNN, DT, RF).
-    best_row = metrics_df.loc[metrics_df["Accuracy"].idxmax()]
-    best_model_name = best_row["Model"]
-    best_model = models[best_model_name]
-
-    print(f"\nBest model: {best_model_name} (Accuracy={best_row['Accuracy']})")
-
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    model_path = MODELS_DIR / "best_model.joblib"
-
-    joblib.dump(
-        {
-            "model": best_model,
-            "model_name": best_model_name,
-            # Column order the model was trained on. predict.py re-applies
-            # this order so a mismatch raises an error instead of silently
-            # feeding the model the wrong feature in the wrong slot.
-            "feature_names": list(X_train.columns),
-            "metrics": best_row.to_dict(),
-        },
-        model_path,
-    )
-
-    print(f"Saved best model to {model_path}")
 
     # --- NEW VISUALIZATION CALLS ---
 
