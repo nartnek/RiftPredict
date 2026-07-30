@@ -31,7 +31,7 @@ def load_artifacts():
 
     return champion_data, model, feature_columns
 
-def get_team_inputs(team_name, roles, champion_data):
+def get_team_inputs(team_name, roles, champion_data, picked_champions):
     team = []
 
     for role in roles:
@@ -46,14 +46,20 @@ def get_team_inputs(team_name, roles, champion_data):
             try:
                 # resolve name so Cho'gath = Chogath, Wukong = MonkeyKing, etc
                 resolved_pick = resolve_champion_name(pick)
-                
-                # Exact name match or resolved name match
-                if resolved_pick in champion_data:
-                    team.append(resolved_pick)
-                    break
 
-                else:
+                # Exact name match or resolved name match
+                if resolved_pick not in champion_data:
                     print(f"'{pick}' is not a valid champion name. Try again.")
+                    continue
+
+                # A champion can only be picked once per match (both teams combined)
+                if resolved_pick in picked_champions:
+                    print(f"'{pick}' has already been picked this match. Try again.")
+                    continue
+
+                team.append(resolved_pick)
+                picked_champions.add(resolved_pick)
+                break
 
             except KeyError:
                 print(f"'{pick}' is not a valid champion name. Try again.")
@@ -72,10 +78,13 @@ def main():
     print("Please enter the full draft:")
     print("")
 
+    # Tracks every champion picked so far across both teams
+    picked_champions = set()
+
     # Prompt user for selections
-    blue_team = get_team_inputs("Blue Team", roles, champion_data)
+    blue_team = get_team_inputs("Blue Team", roles, champion_data, picked_champions)
     print("")
-    red_team = get_team_inputs("Red Team", roles, champion_data)
+    red_team = get_team_inputs("Red Team", roles, champion_data, picked_champions)
 
     # Obtain features dictionary for each team
     try:
