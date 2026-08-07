@@ -31,9 +31,3 @@ def test_transform_dataset():
     assert len(result) == 1                 # row count = 1
     assert result.shape[1] > 1              # column count > 1
     assert "blue_top" not in result.columns # dropped column not in result
-
-also added Eugene's champion name resolver for names like MonkeyKing -> Wukong, Chogath -> Cho'gath, etc.
-
-Explanations currently focus on each team separately and do not consider if, for example, team red counters team blue.
-
-Probability of a team winning is calculated using Scikit-learn's predict_proba(). consistently outputs 60:40 ratio? 
