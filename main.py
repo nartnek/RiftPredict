@@ -3,11 +3,11 @@ import argparse
 from src.data_collection.get_puuid import get_puuid
 from src.data_collection.collect_matches import collect_matches, clean_and_split
 
-# Test:
+# To run:
 # python3 main.py \
 #   --game-name MunchyPunchyLOL \
 #   --tag-line TTV1 \
-#   --target 50 \
+#   --target 1000 \
 #   --matches-per-player 30
 
 def main():

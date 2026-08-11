@@ -1,3 +1,4 @@
+import json
 import os
 import time
 
@@ -27,7 +28,6 @@ def riot_get(url, params=None, max_retries=5):
     headers = {
         "X-Riot-Token": get_api_key()
     }
-
     for attempt in range(max_retries):
         try:
             response = requests.get(
@@ -221,6 +221,7 @@ def is_valid_match_row(row, required_queue=420):
 
 
 CHECKPOINT_PATH = "data/raw_matches.csv"
+CRAWLER_STATE_PATH = "data/crawler_state.json"
 
 
 def load_checkpoint(path=CHECKPOINT_PATH):
@@ -268,6 +269,123 @@ def save_checkpoint(rows, path=CHECKPOINT_PATH):
     )
 
 
+def load_crawler_state(
+    queue,
+    path=CRAWLER_STATE_PATH,
+):
+    """
+    Loads the crawler's progress through player PUUIDs.
+
+    Returns None when no compatible state exists.
+    """
+    if not os.path.exists(path):
+        return None
+
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            state = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        print("Crawler state could not be loaded.")
+        return None
+
+    # Do not reuse a state file from another queue.
+    if state.get("queue") != queue:
+        print(
+            "Crawler state belongs to a different queue. "
+            "Starting a new crawler state."
+        )
+        return None
+
+    return state
+
+
+def save_crawler_state(
+    visited_puuids,
+    puuids_to_visit,
+    seen_match_ids,
+    queue,
+    current_puuid=None,
+    path=CRAWLER_STATE_PATH,
+):
+    """
+    Saves crawler traversal progress so restarting does not require
+    rediscovering participants from old matches.
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    state = {
+        "queue": queue,
+        "visited_puuids": list(visited_puuids),
+        "puuids_to_visit": list(puuids_to_visit),
+        "seen_match_ids": list(seen_match_ids),
+        "current_puuid": current_puuid,
+    }
+
+    # Write to a temporary file first so an interrupted write is
+    # less likely to corrupt the real state file.
+    temporary_path = f"{path}.tmp"
+
+    with open(
+        temporary_path,
+        "w",
+        encoding="utf-8",
+    ) as file:
+        json.dump(state, file)
+
+    os.replace(temporary_path, path)
+
+
+def bootstrap_participants(
+    match_ids,
+    puuids_to_visit,
+    queued_puuids,
+    visited_puuids,
+    number_of_matches=5,
+):
+    """
+    One-time migration helper.
+
+    Older checkpoints contain match rows but not participant PUUIDs.
+    If no crawler_state.json exists yet, read only a few old matches
+    to recover enough participant PUUIDs to restart the crawler.
+
+    Future restarts use crawler_state.json instead.
+    """
+    if not match_ids:
+        return
+
+    bootstrap_ids = list(match_ids)[:number_of_matches]
+
+    print(
+        "\nNo crawler state was found."
+        "\nPerforming one-time participant bootstrap from "
+        f"{len(bootstrap_ids)} existing matches..."
+    )
+
+    for index, match_id in enumerate(
+        bootstrap_ids,
+        start=1,
+    ):
+        print(
+            f"Bootstrap match {index}/{len(bootstrap_ids)}: "
+            f"{match_id}"
+        )
+
+        match_json = get_match_data(match_id)
+
+        participant_puuids = extract_participant_puuids(
+            match_json
+        )
+
+        for participant_puuid in participant_puuids:
+            if (
+                participant_puuid not in visited_puuids
+                and participant_puuid not in queued_puuids
+            ):
+                puuids_to_visit.append(participant_puuid)
+                queued_puuids.add(participant_puuid)
+
+
 def collect_matches(
     puuids,
     target=1000,
@@ -279,21 +397,25 @@ def collect_matches(
     Crawls through match participants until the requested number
     of valid unique matches has been collected.
 
-    Existing checkpoint data is loaded so collection can resume.
+    Match data and crawler traversal state are both checkpointed,
+    allowing collection to resume after interruption without
+    re-downloading existing matches.
     """
+
+    # ------------------------------------------------------------
+    # Load saved matches
+    # ------------------------------------------------------------
+
     loaded_rows = load_checkpoint()
 
-    # Deduplicate previously saved rows by match ID.
     loaded_by_id = {
         row["match_id"]: row
         for row in loaded_rows
         if row.get("match_id")
     }
 
-    # Remember every previously processed match.
     seen_match_ids = set(loaded_by_id)
 
-    # Only valid matches count toward the target.
     rows = [
         row
         for row in loaded_by_id.values()
@@ -315,80 +437,262 @@ def collect_matches(
         )
         return pd.DataFrame(rows)
 
-    puuids_to_visit = deque(puuids)
-    queued_puuids = set(puuids)
-    visited_puuids = set()
+    # ------------------------------------------------------------
+    # Load saved crawler traversal state
+    # ------------------------------------------------------------
+
+    state = load_crawler_state(queue)
+
+    if state is not None:
+        visited_puuids = set(
+            state.get("visited_puuids", [])
+        )
+
+        puuids_to_visit = deque(
+            state.get("puuids_to_visit", [])
+        )
+
+        # Include previously processed invalid matches too.
+        seen_match_ids.update(
+            state.get("seen_match_ids", [])
+        )
+
+        queued_puuids = set(puuids_to_visit)
+
+        # If the program stopped while processing one player,
+        # put that player back at the front of the queue.
+        previous_current_puuid = state.get(
+            "current_puuid"
+        )
+
+        if (
+            previous_current_puuid
+            and previous_current_puuid
+            not in visited_puuids
+            and previous_current_puuid
+            not in queued_puuids
+        ):
+            puuids_to_visit.appendleft(
+                previous_current_puuid
+            )
+            queued_puuids.add(
+                previous_current_puuid
+            )
+
+        # Also make sure the supplied seed PUUID still exists
+        # somewhere in the traversal.
+        for seed_puuid in puuids:
+            if (
+                seed_puuid not in visited_puuids
+                and seed_puuid not in queued_puuids
+            ):
+                puuids_to_visit.append(seed_puuid)
+                queued_puuids.add(seed_puuid)
+
+        print(
+            "Loaded crawler state:"
+            f"\n  Visited players: {len(visited_puuids)}"
+            f"\n  Players waiting: {len(puuids_to_visit)}"
+            f"\n  Known match IDs: {len(seen_match_ids)}"
+        )
+
+    else:
+        # No saved crawler traversal exists yet.
+        puuids_to_visit = deque(puuids)
+        queued_puuids = set(puuids)
+        visited_puuids = set()
+
+        # Your old CSV contains match/champion information but
+        # does not contain participant PUUIDs.
+        #
+        # Therefore, the first time you upgrade to this system,
+        # retrieve only a handful of existing matches to seed
+        # the player queue.
+        if loaded_by_id:
+            bootstrap_participants(
+                match_ids=loaded_by_id.keys(),
+                puuids_to_visit=puuids_to_visit,
+                queued_puuids=queued_puuids,
+                visited_puuids=visited_puuids,
+                number_of_matches=5,
+            )
+
+        save_crawler_state(
+            visited_puuids=visited_puuids,
+            puuids_to_visit=puuids_to_visit,
+            seen_match_ids=seen_match_ids,
+            queue=queue,
+        )
+
+    # ------------------------------------------------------------
+    # Crawl
+    # ------------------------------------------------------------
 
     new_valid_matches = 0
+    current_puuid = None
 
     try:
-        while puuids_to_visit and len(rows) < target:
-            puuid = puuids_to_visit.popleft()
-            queued_puuids.discard(puuid)
+        while (
+            puuids_to_visit
+            and len(rows) < target
+        ):
+            current_puuid = puuids_to_visit.popleft()
+            queued_puuids.discard(current_puuid)
 
-            if puuid in visited_puuids:
+            if current_puuid in visited_puuids:
+                current_puuid = None
                 continue
 
-            visited_puuids.add(puuid)
-
             print(
-                f"\nChecking player {len(visited_puuids)} | "
+                f"\nChecking player "
+                f"{len(visited_puuids) + 1} | "
                 f"Valid matches: {len(rows)}/{target}"
             )
 
             try:
                 match_ids = get_match_ids(
-                    puuid,
+                    current_puuid,
                     count=matches_per_player,
                     queue=queue,
                 )
+
             except RuntimeError:
-                # Stop on an expired/invalid key or exhausted retries.
+                # Most importantly: do not lose this player if
+                # the API key expires.
+                if current_puuid not in queued_puuids:
+                    puuids_to_visit.appendleft(
+                        current_puuid
+                    )
+                    queued_puuids.add(
+                        current_puuid
+                    )
+
+                save_crawler_state(
+                    visited_puuids=visited_puuids,
+                    puuids_to_visit=puuids_to_visit,
+                    seen_match_ids=seen_match_ids,
+                    queue=queue,
+                    current_puuid=current_puuid,
+                )
+
                 raise
+
             except Exception as error:
                 print(
-                    f"Could not retrieve matches for player: "
+                    "Could not retrieve matches for player: "
                     f"{error}"
                 )
+
+                # Put it at the back so it can be retried later.
+                if current_puuid not in queued_puuids:
+                    puuids_to_visit.append(
+                        current_puuid
+                    )
+                    queued_puuids.add(
+                        current_puuid
+                    )
+
+                save_crawler_state(
+                    visited_puuids=visited_puuids,
+                    puuids_to_visit=puuids_to_visit,
+                    seen_match_ids=seen_match_ids,
+                    queue=queue,
+                    current_puuid=current_puuid,
+                )
+
+                current_puuid = None
                 continue
 
+            # ----------------------------------------------------
+            # Process this player's matches
+            # ----------------------------------------------------
+
+            target_reached = False
+
             for match_id in match_ids:
-                is_existing_match = match_id in seen_match_ids
 
-                if is_existing_match:
-                    print(
-                        f"Reading existing match for participant discovery: "
-                        f"{match_id}"
-                    )
-                else:
-                    seen_match_ids.add(match_id)
+                # THIS IS THE IMPORTANT CHANGE:
+                #
+                # Existing matches are skipped immediately.
+                # We do NOT call get_match_data() again.
+                if match_id in seen_match_ids:
+                    continue
 
-                    print(
-                        f"Downloading {match_id} "
-                        f"({len(rows)}/{target} valid)"
-                    )
+                print(
+                    f"Downloading {match_id} "
+                    f"({len(rows)}/{target} valid)"
+                )
+
+                # Mark it before processing so it is not downloaded
+                # twice during the same run.
+                seen_match_ids.add(match_id)
 
                 try:
                     match_json = get_match_data(match_id)
+
                 except RuntimeError:
+                    # The request never completed successfully,
+                    # so allow this match to be retried next run.
+                    seen_match_ids.discard(match_id)
+
+                    if current_puuid not in queued_puuids:
+                        puuids_to_visit.appendleft(
+                            current_puuid
+                        )
+                        queued_puuids.add(
+                            current_puuid
+                        )
+
+                    save_crawler_state(
+                        visited_puuids=visited_puuids,
+                        puuids_to_visit=puuids_to_visit,
+                        seen_match_ids=seen_match_ids,
+                        queue=queue,
+                        current_puuid=current_puuid,
+                    )
+
                     raise
+
                 except Exception as error:
-                    print(f"Skipping {match_id}: {error}")
+                    print(
+                        f"Skipping {match_id}: {error}"
+                    )
+
+                    # It may have been a temporary error.
+                    seen_match_ids.discard(match_id)
                     continue
 
-                # Discover additional players automatically.
-                for participant_puuid in (
-                    extract_participant_puuids(match_json)
-                ):
+                # ------------------------------------------------
+                # Discover new players
+                # ------------------------------------------------
+
+                participant_puuids = (
+                    extract_participant_puuids(
+                        match_json
+                    )
+                )
+
+                for participant_puuid in participant_puuids:
+                    if participant_puuid == current_puuid:
+                        continue
+
                     if (
-                        participant_puuid not in visited_puuids
-                        and participant_puuid not in queued_puuids
+                        participant_puuid
+                        not in visited_puuids
+                        and participant_puuid
+                        not in queued_puuids
                     ):
-                        puuids_to_visit.append(participant_puuid)
-                        queued_puuids.add(participant_puuid)
+                        puuids_to_visit.append(
+                            participant_puuid
+                        )
 
-                if is_existing_match:
-                    continue
+                        queued_puuids.add(
+                            participant_puuid
+                        )
+
+                # ------------------------------------------------
+                # Extract training row
+                # ------------------------------------------------
 
                 row = extract_match_row(match_json)
 
@@ -397,13 +701,15 @@ def collect_matches(
                     required_queue=queue,
                 ):
                     print(
-                        f"Rejected incomplete match: {match_id}"
+                        f"Rejected incomplete match: "
+                        f"{match_id}"
                     )
                     continue
 
                 rows.append(row)
                 new_valid_matches += 1
 
+                # Periodically save BOTH the dataset and crawler.
                 if (
                     new_valid_matches
                     % checkpoint_every
@@ -411,26 +717,70 @@ def collect_matches(
                 ):
                     save_checkpoint(rows)
 
+                    save_crawler_state(
+                        visited_puuids=visited_puuids,
+                        puuids_to_visit=puuids_to_visit,
+                        seen_match_ids=seen_match_ids,
+                        queue=queue,
+                        current_puuid=current_puuid,
+                    )
+
                 if len(rows) >= target:
+                    # Do not mark the player as completely visited.
+                    # If you later raise the target, the crawler can
+                    # query this player again and continue through
+                    # remaining unseen match IDs.
+                    if current_puuid not in queued_puuids:
+                        puuids_to_visit.appendleft(
+                            current_puuid
+                        )
+                        queued_puuids.add(
+                            current_puuid
+                        )
+
+                    target_reached = True
                     break
 
-                # Reduce the likelihood of exceeding rate limits.
+                # Reduce the likelihood of exceeding Riot API limits.
                 time.sleep(1.3)
 
+            if target_reached:
+                break
+
+            # This player's returned match list was fully processed.
+            visited_puuids.add(current_puuid)
+            current_puuid = None
+
+            # Saving after every completed player is cheap and makes
+            # restarts much more reliable.
+            save_crawler_state(
+                visited_puuids=visited_puuids,
+                puuids_to_visit=puuids_to_visit,
+                seen_match_ids=seen_match_ids,
+                queue=queue,
+                current_puuid=None,
+            )
+
     finally:
-        # Save progress even when the program stops because of
-        # an expired key, network failure, or Ctrl+C.
+        # Runs for normal exit, Ctrl+C, expired API key, etc.
         save_checkpoint(rows)
+
+        save_crawler_state(
+            visited_puuids=visited_puuids,
+            puuids_to_visit=puuids_to_visit,
+            seen_match_ids=seen_match_ids,
+            queue=queue,
+            current_puuid=current_puuid,
+        )
 
     print("\nCollection finished:")
     print(f"Visited players: {len(visited_puuids)}")
-    print(f"Processed match IDs: {len(seen_match_ids)}")
+    print(f"Known match IDs: {len(seen_match_ids)}")
+    print(f"Players waiting: {len(puuids_to_visit)}")
     print(f"New valid matches: {new_valid_matches}")
     print(f"Total valid matches: {len(rows)}")
 
     return pd.DataFrame(rows)
-
-
 
 
 def clean_and_split(df, required_queue=420):
