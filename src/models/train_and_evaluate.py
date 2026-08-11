@@ -118,7 +118,13 @@ def main():
         return
 
     n_train = len(X_train)
-    knn_neighbors = min(5, n_train)
+
+    # n_neighbors also controls predict_proba granularity: KNN can only output
+    # multiples of 1/n_neighbors (e.g. n=5 -> steps of 20%, giving blocky
+    # probabilities like exactly 60%/40%). Using a larger k gives finer steps
+    # (n=25 -> steps of 4%) while still being a reasonable KNN choice for our
+    # dataset size.
+    knn_neighbors = min(25, n_train)
 
     if knn_neighbors % 2 == 0 and knn_neighbors > 1:
         knn_neighbors -= 1

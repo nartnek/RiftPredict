@@ -4,17 +4,20 @@
 # run: python -m src.ui.user_interface
 
 import joblib
+import json
 import pandas as pd
 from pathlib import Path
 
 from src.feature_engineering.feature_builder import build_features
 from src.feature_engineering.load_champion_data import load_champion_data
-from src.models.analyze_team import generate_explanation
+from src.models.analyze_team import generate_explanation, generate_matchup_explanation
 from src.preprocessing.encode_champions import resolve_champion_name
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODEL_PATH = PROJECT_ROOT / "saved_models" / "best_model.joblib"
 JSON_PATH = PROJECT_ROOT / "data" / "champions.json"
+WINRATES_PATH = PROJECT_ROOT / "data" / "champion_winrates.joblib"
+FEATURE_MATRICES_PATH = PROJECT_ROOT / "data" / "feature_matrices.json"
 
 def load_artifacts():
     if not MODEL_PATH.exists():
@@ -22,14 +25,34 @@ def load_artifacts():
             f"Model file not found at {MODEL_PATH}. Run 'train_and_evaluate.py' first"
         )
 
+    if not WINRATES_PATH.exists():
+        raise FileNotFoundError(
+            f"Champion win rates not found at {WINRATES_PATH}. Run "
+            "'python -m src.preprocessing.encode_champions' first."
+        )
+
+    if not FEATURE_MATRICES_PATH.exists():
+        raise FileNotFoundError(
+            f"Feature matrices not found at {FEATURE_MATRICES_PATH}. Make "
+            "sure feature_matrices.json is in the data/ folder."
+        )
+
     # Load model and champion dataset
     model = joblib.load(MODEL_PATH)
     champion_data = load_champion_data(JSON_PATH)
 
+    # Load champion win rates computed from the training split, so live
+    # predictions use the exact same win-rate values the model was trained on.
+    champion_winrates = joblib.load(WINRATES_PATH)
+
+    # Load AP ratio / AP variance / role frequency / lane counter matchup data.
+    with open(FEATURE_MATRICES_PATH) as f:
+        feature_matrices = json.load(f)
+
     # Extract required feature names directly from the fitted model
     feature_columns = model.feature_names_in_
 
-    return champion_data, model, feature_columns
+    return champion_data, model, feature_columns, champion_winrates, feature_matrices
 
 def get_team_inputs(team_name, roles, champion_data, picked_champions):
     team = []
@@ -67,8 +90,8 @@ def get_team_inputs(team_name, roles, champion_data, picked_champions):
     return team
 
 def main():
-    # Load champion data and trained model
-    champion_data, model, feature_columns = load_artifacts()
+    # Load champion data, trained model, champion win rates, and feature matrices
+    champion_data, model, feature_columns, champion_winrates, feature_matrices = load_artifacts()
 
     roles = ["Top", "Jungle", "Mid", "ADC", "Support"]
 
@@ -88,7 +111,9 @@ def main():
 
     # Obtain features dictionary for each team
     try:
-        features_dict = build_features(blue_team, red_team, champion_data)
+        features_dict = build_features(
+            blue_team, red_team, champion_data, champion_winrates, feature_matrices
+        )
     except KeyError as e:
         print(f"Error building features")
         return
@@ -101,8 +126,9 @@ def main():
     blue_prob = probabilities[1] * 100
     red_prob = probabilities[0] * 100
 
-    blue_analysis = generate_explanation(blue_team, champion_data)
-    red_analysis  = generate_explanation(red_team, champion_data)
+    blue_analysis = generate_explanation(blue_team, champion_data, champion_winrates, feature_matrices)
+    red_analysis  = generate_explanation(red_team, champion_data, champion_winrates, feature_matrices)
+    matchup_analysis = generate_matchup_explanation(blue_team, red_team, feature_matrices)
 
     if prediction == 1:
         print(f"\nPredicted Winner: BLUE TEAM ({blue_prob:.1f}% confidence)")
@@ -113,6 +139,13 @@ def main():
         print("\n🔴 Red Team Strengths:", red_analysis["reasons"])
         print("🔵 Blue Team Weaknesses:", blue_analysis["weaknesses"])
 
+
+    if matchup_analysis["blue_favored_lanes"]:
+        print(f"\n⚔️  Blue favored in: {', '.join(matchup_analysis['blue_favored_lanes'])}")
+    if matchup_analysis["red_favored_lanes"]:
+        print(f"⚔️  Red favored in: {', '.join(matchup_analysis['red_favored_lanes'])}")
+    if matchup_analysis["even_lanes"]:
+        print(f"⚔️  Even matchup in: {', '.join(matchup_analysis['even_lanes'])}")
 
     print(f"\n📊 Win Chances:")
     print(f"   • Blue Team: {blue_prob:.1f}%")
