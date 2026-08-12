@@ -50,7 +50,15 @@ Enter all 10 champion picks (5 per team, Top/Jungle/Mid/ADC/Support order) when 
 | `data/champion_winrates.joblib` | Champion win rates computed during training — must match what the saved model was trained on |
  
 You do **not** need `data/raw_matches.csv` for this — it's already baked into the saved `.joblib` artifacts above.
- 
+
+## Running Tests
+
+To run the full test suite from the project root, use:
+
+```bash
+python -m pytest tests/ -v
+```
+
 ## Optional: collect your own data and retrain
  
 Everything below is only necessary if you want to gather a fresh set of matches and train the models yourself, rather than using the ones already included.
