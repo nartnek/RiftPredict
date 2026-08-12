@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 ## Quick Start — run predictions right away
  
-This repo already includes a trained model, so there's no need to collect data or train anything to try it out. As long as the files below are present, just run:
+This repo already includes a trained model, so there's no need to collect data or train anything to try it out. You can just run:
  
 ```bash
 python -m src.ui.user_interface
