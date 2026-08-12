@@ -7,14 +7,13 @@ Ken Tran, Oliver Ancheta, Mark Cao, Eugene Park
 
 ## Requirements
 
-- Python 3.x
+- Python 3.14
 - A Riot Games API key — **only needed if you want to re-run the crawler yourself.** Not required if you're just retraining on the included/cached match data or running the prediction interface.
 
 If you do need it, create a `.env` file in the project root:
 ```
 RIOT_API_KEY=your_riot_api_key_here
 ```
-Both `get_puuid.py` and the crawler load this automatically via `python-dotenv`. Riot API keys from the developer portal (non-production) expire every 24 hours — you'll need to regenerate and update this if the crawler starts failing with a 401/403 error.
 
 ## Setup
 
@@ -31,60 +30,83 @@ pip install -r requirements.txt
 
 **Windows note:** use `python` instead of `python3` throughout this guide.
 
-## Required data files
-
-Make sure the following exist under `data/` before running anything:
-
+## Quick Start — run predictions right away
+ 
+This repo already includes a trained model, so there's no need to collect data or train anything to try it out. As long as the files below are present, just run:
+ 
+```bash
+python -m src.ui.user_interface
+```
+ 
+Enter all 10 champion picks (5 per team, Top/Jungle/Mid/ADC/Support order) when prompted. The interface rejects invalid champion names and duplicate picks across the match, then prints a predicted winner, win probability, team strengths/weaknesses, and per-lane matchup reasoning.
+ 
+**Files this needs** (all included in the repo):
+ 
 | File | Purpose |
 |---|---|
 | `data/champions.json` | Static champion metadata (tags, stats) from Riot Data Dragon |
-| `data/raw_matches.csv` | Historical match data (champion picks + outcome per game) — used to compute win rates and train models |
 | `data/feature_matrices.json` | Precomputed AP ratio/variance, role frequency, and lane counter-matchup data |
-
-*(If you're collecting your own match data instead of using the included dataset, this is a two-step manual process — there's no single "run the crawler" command, since `collect_matches()` has no built-in entry point:)*
-
+| `saved_models/best_model.joblib` | The trained Ensemble model |
+| `data/champion_winrates.joblib` | Champion win rates computed during training — must match what the saved model was trained on |
+ 
+You do **not** need `data/raw_matches.csv` for this — it's already baked into the saved `.joblib` artifacts above.
+ 
+## Optional: collect your own data and retrain
+ 
+Everything below is only necessary if you want to gather a fresh set of matches and train the models yourself, rather than using the ones already included.
+ 
+### Collecting match data
+ 
+This is a two-step manual process — there's no single "run the crawler" command, since `collect_matches()` has no built-in entry point.
+ 
 **Step A — get a seed PUUID from a Riot ID:**
 ```bash
 python get_puuid.py --game-name "SomeSummoner" --tag-line "NA1"
 ```
 This prints a PUUID to the console — copy it for Step B.
-
+ 
 **Step B — run the crawler with that seed PUUID:**
 ```python
 from crawler import collect_matches, clean_and_split  # adjust import path to match your file location
-
+ 
 df = collect_matches(["<puuid-from-step-A>"], target=1000)
 clean_and_split(df)
 ```
 `collect_matches()` starts from your seed player, automatically discovers new PUUIDs from every match it downloads (co-players), and keeps crawling until it hits `target` valid matches. It checkpoints progress to `data/raw_matches.csv` every 10 matches (`checkpoint_every=10`), and resumes automatically from that checkpoint if interrupted — safe to `Ctrl+C` and restart. Requires a `RIOT_API_KEY` set in a `.env` file in the project root (both scripts load it via `python-dotenv`).
-
+ 
 **Note:** `clean_and_split()` also writes `data/clean_matches.csv`, `data/train.csv`, and `data/test.csv` — but the current pipeline (`encode_champions.py`) reads directly from `data/raw_matches.csv` and does its own train/test split, so `train.csv`/`test.csv` aren't currently used downstream. Worth deciding whether to keep that step or remove it.
-
-## Running the pipeline
-
+ 
+Retraining additionally needs:
+ 
+| File | Purpose |
+|---|---|
+| `data/raw_matches.csv` | Historical match data (champion picks + outcome per game) — used to compute win rates and train models |
+ 
+### Retraining steps
+ 
 Run these **in order** from the project root. Each step depends on the output of the previous one.
-
-### 1. Build features and compute champion win rates
-
+ 
+**1. Build features and compute champion win rates**
+ 
 ```bash
 python -m src.preprocessing.encode_champions
 ```
-
-This splits `raw_matches.csv` into train/test, computes Bayesian-smoothed champion win rates from the training split only (to avoid leakage), and saves them to `data/champion_winrates.joblib` for later reuse.
-
+ 
+This splits `raw_matches.csv` into train/test, computes Bayesian-smoothed champion win rates from the training split only (to avoid leakage), and saves them to `data/champion_winrates.joblib`, overwriting the one included in the repo.
+ 
 Expected output (abbreviated):
 ```
 Loaded 15000 raw matches, XXXX remain after dropping duplicates/remakes.
 ```
-
-### 2. Train and evaluate the models
-
+ 
+**2. Train and evaluate the models**
+ 
 ```bash
 python -m src.models.train_and_evaluate
 ```
-
-Trains KNN, Decision Tree, Random Forest, and a soft-voting Ensemble; saves each model to `saved_models/`, saves the Ensemble as `saved_models/best_model.joblib`, and writes evaluation metrics/charts to `results/`.
-
+ 
+Trains KNN, Decision Tree, Random Forest, and a soft-voting Ensemble; saves each model to `saved_models/`, saves the Ensemble as `saved_models/best_model.joblib` (overwriting the included one), and writes evaluation metrics/charts to `results/`.
+ 
 Expected output (abbreviated):
 ```
 Training samples: ...
@@ -97,30 +119,16 @@ Testing samples: ...
 Ensemble    0.5195     0.5198  0.5195       0.5196
 Saved best overall model (Ensemble) to 'saved_models/best_model.joblib'
 ```
-
+ 
 Check `results/metrics.csv`, `results/model_comparison.png`, `results/rf_feature_importance.png`, and `results/confusion_matrix_*.png` afterward.
-
-### 3. Run the interactive prediction interface
-
+ 
+**3. Try your retrained model**
+ 
 ```bash
 python -m src.ui.user_interface
 ```
 
-Enter all 10 champion picks (5 per team, Top/Jungle/Mid/ADC/Support order) when prompted. The interface rejects invalid champion names and duplicate picks across the match, then prints a predicted winner, win probability, team strengths/weaknesses, and per-lane matchup reasoning.
 
-## Troubleshooting
-
-**`ModuleNotFoundError: No module named 'src'`**
-Cause: running a script directly by file path (e.g. via an IDE's "Run" button) instead of as a module from the project root.
-Fix: always run with `python -m <module.path>` from the `RiftPredict/` root directory, exactly as shown above — not `python src/models/train_and_evaluate.py`.
-
-**`FileNotFoundError` for `best_model.joblib`, `champion_winrates.joblib`, or `feature_matrices.json`**
-Cause: running `user_interface.py` before completing steps 1 and 2, or a required data file missing from `data/`.
-Fix: run the pipeline in order (encode_champions → train_and_evaluate → user_interface), and confirm all three files listed under "Required data files" above are present.
-
-**`RuntimeError: The Riot API key is missing, invalid, or expired.`**
-Cause: `RIOT_API_KEY` isn't set in `.env`, or your Riot developer portal key (if using a non-production key) has expired — these expire every 24 hours.
-Fix: confirm `.env` exists in the project root with a valid `RIOT_API_KEY`, and regenerate the key from the Riot Developer Portal if it's been more than a day since you last generated one.
 
 ## Project structure
 
