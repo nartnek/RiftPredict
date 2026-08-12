@@ -40,16 +40,6 @@ python -m src.ui.user_interface
  
 Enter all 10 champion picks (5 per team, Top/Jungle/Mid/ADC/Support order) when prompted. The interface rejects invalid champion names and duplicate picks across the match, then prints a predicted winner, win probability, team strengths/weaknesses, and per-lane matchup reasoning.
  
-**Files this needs** (all included in the repo):
- 
-| File | Purpose |
-|---|---|
-| `data/champions.json` | Static champion metadata (tags, stats) from Riot Data Dragon |
-| `data/feature_matrices.json` | Precomputed AP ratio/variance, role frequency, and lane counter-matchup data |
-| `saved_models/best_model.joblib` | The trained Ensemble model |
-| `data/champion_winrates.joblib` | Champion win rates computed during training — must match what the saved model was trained on |
- 
-You do **not** need `data/raw_matches.csv` for this — it's already baked into the saved `.joblib` artifacts above.
 
 ## Running Tests
 
