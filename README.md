@@ -1,0 +1,146 @@
+# RiftPredict
+
+Predicts the winner of a League of Legends match from the champion draft alone, using supervised classification (KNN, Decision Tree, Random Forest, and a soft-voting Ensemble) trained on historical ranked match data pulled from the Riot Games Match-V5 API.
+
+CMPT 310 — D100, Group 4
+Ken Tran, Oliver Ancheta, Mark Cao, Eugene Park
+
+## Requirements
+
+- Python 3.x
+- A Riot Games API key — **only needed if you want to re-run the crawler yourself.** Not required if you're just retraining on the included/cached match data or running the prediction interface.
+
+If you do need it, create a `.env` file in the project root:
+```
+RIOT_API_KEY=your_riot_api_key_here
+```
+Both `get_puuid.py` and the crawler load this automatically via `python-dotenv`. Riot API keys from the developer portal (non-production) expire every 24 hours — you'll need to regenerate and update this if the crawler starts failing with a 401/403 error.
+
+## Setup
+
+```bash
+git clone https://github.com/nartnek/RiftPredict.git
+cd RiftPredict
+
+python -m venv venv
+source venv/bin/activate        # macOS/Linux
+# venv\Scripts\activate         # Windows
+
+pip install -r requirements.txt
+```
+
+**Windows note:** use `python` instead of `python3` throughout this guide.
+
+## Required data files
+
+Make sure the following exist under `data/` before running anything:
+
+| File | Purpose |
+|---|---|
+| `data/champions.json` | Static champion metadata (tags, stats) from Riot Data Dragon |
+| `data/raw_matches.csv` | Historical match data (champion picks + outcome per game) — used to compute win rates and train models |
+| `data/feature_matrices.json` | Precomputed AP ratio/variance, role frequency, and lane counter-matchup data |
+
+*(If you're collecting your own match data instead of using the included dataset, this is a two-step manual process — there's no single "run the crawler" command, since `collect_matches()` has no built-in entry point:)*
+
+**Step A — get a seed PUUID from a Riot ID:**
+```bash
+python get_puuid.py --game-name "SomeSummoner" --tag-line "NA1"
+```
+This prints a PUUID to the console — copy it for Step B.
+
+**Step B — run the crawler with that seed PUUID:**
+```python
+from crawler import collect_matches, clean_and_split  # adjust import path to match your file location
+
+df = collect_matches(["<puuid-from-step-A>"], target=1000)
+clean_and_split(df)
+```
+`collect_matches()` starts from your seed player, automatically discovers new PUUIDs from every match it downloads (co-players), and keeps crawling until it hits `target` valid matches. It checkpoints progress to `data/raw_matches.csv` every 10 matches (`checkpoint_every=10`), and resumes automatically from that checkpoint if interrupted — safe to `Ctrl+C` and restart. Requires a `RIOT_API_KEY` set in a `.env` file in the project root (both scripts load it via `python-dotenv`).
+
+**Note:** `clean_and_split()` also writes `data/clean_matches.csv`, `data/train.csv`, and `data/test.csv` — but the current pipeline (`encode_champions.py`) reads directly from `data/raw_matches.csv` and does its own train/test split, so `train.csv`/`test.csv` aren't currently used downstream. Worth deciding whether to keep that step or remove it.
+
+## Running the pipeline
+
+Run these **in order** from the project root. Each step depends on the output of the previous one.
+
+### 1. Build features and compute champion win rates
+
+```bash
+python -m src.preprocessing.encode_champions
+```
+
+This splits `raw_matches.csv` into train/test, computes Bayesian-smoothed champion win rates from the training split only (to avoid leakage), and saves them to `data/champion_winrates.joblib` for later reuse.
+
+Expected output (abbreviated):
+```
+Loaded 15000 raw matches, XXXX remain after dropping duplicates/remakes.
+```
+
+### 2. Train and evaluate the models
+
+```bash
+python -m src.models.train_and_evaluate
+```
+
+Trains KNN, Decision Tree, Random Forest, and a soft-voting Ensemble; saves each model to `saved_models/`, saves the Ensemble as `saved_models/best_model.joblib`, and writes evaluation metrics/charts to `results/`.
+
+Expected output (abbreviated):
+```
+Training samples: ...
+Testing samples: ...
+--- Model Evaluation Results ---
+   Model  Accuracy  Precision  Recall  Weighted F1
+     KNN    0.5124     0.5085  0.5124       0.5077
+      DT    0.5195     0.5198  0.5195       0.5196
+      RF    0.5367     0.5321  0.5367       0.5250
+Ensemble    0.5195     0.5198  0.5195       0.5196
+Saved best overall model (Ensemble) to 'saved_models/best_model.joblib'
+```
+
+Check `results/metrics.csv`, `results/model_comparison.png`, `results/rf_feature_importance.png`, and `results/confusion_matrix_*.png` afterward.
+
+### 3. Run the interactive prediction interface
+
+```bash
+python -m src.ui.user_interface
+```
+
+Enter all 10 champion picks (5 per team, Top/Jungle/Mid/ADC/Support order) when prompted. The interface rejects invalid champion names and duplicate picks across the match, then prints a predicted winner, win probability, team strengths/weaknesses, and per-lane matchup reasoning.
+
+## Troubleshooting
+
+**`ModuleNotFoundError: No module named 'src'`**
+Cause: running a script directly by file path (e.g. via an IDE's "Run" button) instead of as a module from the project root.
+Fix: always run with `python -m <module.path>` from the `RiftPredict/` root directory, exactly as shown above — not `python src/models/train_and_evaluate.py`.
+
+**`FileNotFoundError` for `best_model.joblib`, `champion_winrates.joblib`, or `feature_matrices.json`**
+Cause: running `user_interface.py` before completing steps 1 and 2, or a required data file missing from `data/`.
+Fix: run the pipeline in order (encode_champions → train_and_evaluate → user_interface), and confirm all three files listed under "Required data files" above are present.
+
+**`RuntimeError: The Riot API key is missing, invalid, or expired.`**
+Cause: `RIOT_API_KEY` isn't set in `.env`, or your Riot developer portal key (if using a non-production key) has expired — these expire every 24 hours.
+Fix: confirm `.env` exists in the project root with a valid `RIOT_API_KEY`, and regenerate the key from the Riot Developer Portal if it's been more than a day since you last generated one.
+
+## Project structure
+
+```
+RiftPredict/
+├── data/                          # champions.json, raw_matches.csv, feature_matrices.json
+├── src/
+│   ├── preprocessing/
+│   │   └── encode_champions.py    # train/test split, win-rate computation
+│   ├── feature_engineering/
+│   │   ├── composition_features.py
+│   │   └── feature_builder.py
+│   ├── models/
+│   │   ├── train_and_evaluate.py
+│   │   └── analyze_team.py        # human-readable prediction explanations
+│   └── ui/
+│       └── user_interface.py      # interactive CLI
+├── saved_models/                  # generated by train_and_evaluate.py
+├── results/                       # generated by train_and_evaluate.py
+├── tests/                         # unit tests
+└── requirements.txt
+```
+
