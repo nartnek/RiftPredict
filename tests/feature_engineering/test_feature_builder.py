@@ -34,16 +34,40 @@ CHAMPION_DATA = {
             "attackdamage": 53,
         },
     },
+
+    # Neutral filler with no tags, used to pad teams to a full 5-champion
+    # draft (Top/Jungle/Mid/ADC/Support) without affecting tag-count
+    # assertions. build_features requires full 5-length teams since it also
+    # computes lane-matchup features, which index into fixed Top/Mid/Support
+    # positions (0, 2, 4).
+    "Filler": {
+        "tags": [],
+        "info": {
+            "attack": 5,
+            "defense": 5,
+            "magic": 5,
+            "difficulty": 1,
+        },
+        "stats": {
+            "attackrange": 400,
+            "hp": 500,
+            "armor": 30,
+            "attackdamage": 50,
+        },
+    },
 }
+
+# Aatrox/Ahri in the Top slot (index 0), Filler everywhere else, so tag
+# counts stay exactly 1 as before while satisfying the 5-champion length
+# build_features needs for lane-advantage indexing.
+BLUE_TEAM = ["Aatrox", "Filler", "Filler", "Filler", "Filler"]
+RED_TEAM = ["Ahri", "Filler", "Filler", "Filler", "Filler"]
 
 
 def test_build_features_adds_blue_and_red_prefixes():
-    blue_team = ["Aatrox"]
-    red_team = ["Ahri"]
-
     features = build_features(
-        blue_team,
-        red_team,
+        BLUE_TEAM,
+        RED_TEAM,
         CHAMPION_DATA,
     )
 
@@ -59,12 +83,9 @@ def test_build_features_adds_blue_and_red_prefixes():
 
 
 def test_build_features_keeps_blue_and_red_features_separate():
-    blue_team = ["Aatrox"]
-    red_team = ["Ahri"]
-
     features = build_features(
-        blue_team,
-        red_team,
+        BLUE_TEAM,
+        RED_TEAM,
         CHAMPION_DATA,
     )
 
@@ -83,8 +104,8 @@ def test_build_features_keeps_blue_and_red_features_separate():
 
 def test_build_features_returns_dictionary():
     features = build_features(
-        ["Aatrox"],
-        ["Aatrox"],
+        BLUE_TEAM,
+        BLUE_TEAM,
         CHAMPION_DATA,
     )
 
@@ -94,12 +115,22 @@ def test_build_features_returns_dictionary():
 
 def test_all_feature_names_have_team_prefixes():
     features = build_features(
-        ["Aatrox"],
-        ["Aatrox"],
+        BLUE_TEAM,
+        BLUE_TEAM,
         CHAMPION_DATA,
     )
 
-    # Every feature should begin with either
-    # "blue_" or "red_"
+    # Lane-advantage features are intentionally cross-team (Blue champ vs.
+    # Red champ in the same lane), so they don't get a blue_/red_ prefix
+    # like the per-team aggregate features do.
+    CROSS_TEAM_FEATURES = {
+        "top_lane_advantage",
+        "mid_lane_advantage",
+        "support_lane_advantage",
+    }
+
+    # Every other feature should begin with either "blue_" or "red_"
     for feature_name in features:
+        if feature_name in CROSS_TEAM_FEATURES:
+            continue
         assert (feature_name.startswith("blue_") or feature_name.startswith("red_"))

@@ -4,8 +4,11 @@ import pandas as pd
 from src.feature_engineering.load_champion_data import load_champion_data
 from src.preprocessing.encode_champions import transform_dataset
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# tests/preprocessing/test_encode_champions.py -> project root is two levels
+# up (parents[0]=preprocessing, parents[1]=tests, parents[2]=RiftPredict).
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 JSON_PATH = PROJECT_ROOT / "data" / "champions.json"
+
 
 def test_transform_dataset():
     columns = [
