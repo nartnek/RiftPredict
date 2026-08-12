@@ -4,7 +4,7 @@ from src.feature_engineering.load_champion_data import load_champion_data
 from  src.feature_engineering.composition_features import get_team_composition_features
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent
+PROJECT_ROOT = Path(__file__).parents[2]
 
 champion_data = load_champion_data(PROJECT_ROOT / "data" / "champions.json")
 
