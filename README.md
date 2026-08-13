@@ -53,27 +53,28 @@ python -m pytest tests/ -v
  
 Everything below is only necessary if you want to gather a fresh set of matches and train the models yourself, rather than using the ones already included.
  
-### Collecting match data
+### Collecting match data (and optionally retraining) in one command
  
-This is a two-step manual process — there's no single "run the crawler" command, since `collect_matches()` has no built-in entry point.
- 
-**Step A — get a seed PUUID from a Riot ID:**
 ```bash
-python get_puuid.py --game-name "SomeSummoner" --tag-line "NA1"
+python main.py \
+  --game-name "SomeSummoner" \
+  --tag-line "NA1" \
+  --target 1000 \
+  --matches-per-player 30
 ```
-This prints a PUUID to the console — copy it for Step B.
  
-**Step B — run the crawler with that seed PUUID:**
-```python
-from crawler import collect_matches, clean_and_split  # adjust import path to match your file location
+This looks up the PUUID for the given Riot ID, then crawls outward from that player — automatically discovering new players from every match it downloads — until it collects `--target` valid matches. It checkpoints progress to `data/raw_matches.csv` every 10 matches and resumes automatically if interrupted (safe to `Ctrl+C` and restart). Requires `RIOT_API_KEY` set in `.env`.
  
-df = collect_matches(["<puuid-from-step-A>"], target=1000)
-clean_and_split(df)
+Add `--train` to also run the full retraining pipeline (feature building + all four models) immediately after collection finishes, in the same command:
+ 
+```bash
+python main.py --game-name "SomeSummoner" --tag-line "NA1" --target 1000 --train
 ```
-`collect_matches()` starts from your seed player, automatically discovers new PUUIDs from every match it downloads (co-players), and keeps crawling until it hits `target` valid matches. It checkpoints progress to `data/raw_matches.csv` every 10 matches (`checkpoint_every=10`), and resumes automatically from that checkpoint if interrupted — safe to `Ctrl+C` and restart. Requires a `RIOT_API_KEY` set in a `.env` file in the project root (both scripts load it via `python-dotenv`).
  
-**Note:** `clean_and_split()` also writes `data/clean_matches.csv`, `data/train.csv`, and `data/test.csv` — but the current pipeline (`encode_champions.py`) reads directly from `data/raw_matches.csv` and does its own train/test split, so `train.csv`/`test.csv` aren't currently used downstream. Worth deciding whether to keep that step or remove it.
+Other flags: `--matches-per-player` (default 50) controls how many recent matches are checked per discovered player; `--queue` (default 420, ranked solo/duo — use 440 for ranked flex).
  
+**Note:** `clean_and_split()` (called internally by `main.py`) also writes `data/clean_matches.csv`, `data/train.csv`, and `data/test.csv` — but the current pipeline (`encode_champions.py`) reads directly from `data/raw_matches.csv` and does its own train/test split, so `train.csv`/`test.csv` aren't currently used downstream. Worth deciding whether to keep that step or remove it.
+
 Retraining additionally needs:
  
 | File | Purpose |
