@@ -133,6 +133,7 @@ python -m src.ui.user_interface
 
 ```
 RiftPredict/
+├── main.py                        # entry point: collect data (+ optionally retrain)
 ├── data/                          # champions.json, raw_matches.csv, feature_matrices.json
 ├── src/
 │   ├── preprocessing/
